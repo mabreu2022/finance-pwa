@@ -1,36 +1,151 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Connect Finance - Aplicativo Financeiro PWA
 
-## Getting Started
+Um aplicativo financeiro completo inspirado no Microsoft Money, desenvolvido como Progressive Web App (PWA) para gerenciar contas a pagar e receber.
 
-First, run the development server:
+## Funcionalidades
 
+### Dashboard
+- Visão geral das finanças em tempo real
+- Cards com totais a pagar, receber e saldo previsto
+- Gráfico de fluxo de caixa mensal
+- Lista de contas recentes
+
+### Contas a Pagar
+- Cadastro completo de despesas
+- Categorização (Moradia, Alimentação, Transporte, etc.)
+- Status: Pendente, Pago, Atrasado
+- Marcar como pago com data de pagamento
+- Edição e exclusão de contas
+- Busca por descrição ou categoria
+
+### Contas a Receber
+- Cadastro completo de receitas
+- Categorização (Salário, Freelance, Vendas, etc.)
+- Status: Pendente, Recebido, Atrasado
+- Marcar como recebido com data de recebimento
+- Edição e exclusão de contas
+- Busca por descrição ou categoria
+
+### Relatórios
+- Gráficos de pizza por categoria (despesas e receitas)
+- Gráfico de barras mensal comparativo
+- Totais pagos, recebidos e pendentes
+- Análise detalhada por período
+
+### Recursos Técnicos
+- **PWA**: Instalável em dispositivos móveis e desktop
+- **Armazenamento Local**: IndexedDB para persistência de dados
+- **Tema Escuro/Claro**: Alternância automática e manual
+- **Design Responsivo**: Interface adaptável a qualquer tela
+- **Offline First**: Funciona sem conexão com internet
+
+## Tecnologias Utilizadas
+
+- Next.js 16
+- React 19
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+- Dexie.js (IndexedDB)
+- Recharts (Gráficos)
+- next-pwa
+
+## Como Usar
+
+### Instalação
+1. Clone o repositório:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <url-do-repositorio>
+cd finance-pwa
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Instale as dependências:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Execute em modo de desenvolvimento:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Acesse em `http://localhost:3000`
 
-## Learn More
+### Build para Produção
+```bash
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+Os arquivos estáticos serão gerados na pasta `dist/`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Instalação do PWA
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+#### Android (Chrome)
+1. Acesse o site pelo Chrome
+2. Toque no menu (três pontos)
+3. Selecione "Adicionar à tela inicial"
 
-## Deploy on Vercel
+#### iOS (Safari)
+1. Acesse o site pelo Safari
+2. Toque no botão compartilhar
+3. Selecione "Adicionar à Tela de Início"
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+#### Desktop (Chrome/Edge)
+1. Acesse o site
+2. Clique no ícone de instalação na barra de endereço
+3. Ou vá em Menu > Instalar Connect Finance
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Estrutura do Projeto
+
+```
+finance-pwa/
+├── src/
+│   ├── app/                    # Páginas do Next.js
+│   │   ├── page.tsx           # Dashboard
+│   │   ├── contas-pagar/      # Página de contas a pagar
+│   │   ├── contas-receber/    # Página de contas a receber
+│   │   ├── relatorios/        # Página de relatórios
+│   │   ├── layout.tsx         # Layout principal
+│   │   └── globals.css        # Estilos globais
+│   ├── components/
+│   │   ├── ui/                # Componentes shadcn/ui
+│   │   └── sidebar.tsx        # Navegação lateral
+│   └── lib/
+│       ├── db/
+│       │   └── database.ts    # Configuração IndexedDB
+│       └── utils.ts           # Utilitários
+├── public/
+│   ├── icons/                 # Ícones do PWA
+│   └── manifest.json          # Configuração do PWA
+├── next.config.ts             # Configuração Next.js
+└── package.json
+```
+
+## Características do Design
+
+- **Paleta de Cores**: Gradiente ciano para azul como identidade visual
+- **Tipografia**: Geist (Sans) e Geist Mono
+- **Componentes**: Cards com sombras suaves e bordas arredondadas
+- **Micro-interações**: Hover effects e transições suaves
+- **Acessibilidade**: Contraste adequado e navegação por teclado
+
+## Armazenamento de Dados
+
+Todos os dados são armazenados localmente no navegador usando IndexedDB através da biblioteca Dexie.js. Nenhum dado é enviado para servidores externos, garantindo total privacidade.
+
+## Próximas Melhorias
+
+- [ ] Sincronização entre dispositivos
+- [ ] Exportação de relatórios (PDF/Excel)
+- [ ] Notificações push para contas próximas do vencimento
+- [ ] Importação de extratos bancários
+- [ ] Metas financeiras e orçamentos
+- [ ] Múltiplas contas/carteiras
+
+## Licença
+
+MIT License - Livre para uso pessoal e comercial.
+
+---
+
+Desenvolvido com Next.js e shadcn/ui

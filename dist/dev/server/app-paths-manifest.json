@@ -1,0 +1,7 @@
+{
+  "/contas-pagar/page": "app/contas-pagar/page.js",
+  "/contas-receber/page": "app/contas-receber/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js",
+  "/relatorios/page": "app/relatorios/page.js"
+}
