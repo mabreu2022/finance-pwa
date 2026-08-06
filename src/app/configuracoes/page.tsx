@@ -34,6 +34,7 @@ interface UsuarioForm {
   senha: string;
   perfil: Perfil;
   fone: string;
+  comissao_percentual: string;
 }
 
 interface Usuario {
@@ -46,6 +47,7 @@ interface Usuario {
   fone: string | null;
   ultimo_acesso: string | null;
   data_cadastro: string;
+  comissao_percentual: number | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -96,7 +98,7 @@ const PERFIL_INFO: Record<Perfil, { label: string; description: string; features
   },
 };
 
-const EMPTY_FORM: UsuarioForm = { nome: '', email: '', senha: '', perfil: 'FINANCEIRO', fone: '' };
+const EMPTY_FORM: UsuarioForm = { nome: '', email: '', senha: '', perfil: 'FINANCEIRO', fone: '', comissao_percentual: '' };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function ConfiguracoesPage() {
@@ -127,6 +129,12 @@ export default function ConfiguracoesPage() {
   const [logoSuccess, setLogoSuccess] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Configurações Gerais ──────────────────────────────────────────────────
+  const [comissaoPadrao, setComissaoPadrao] = useState<string>('5.00');
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configSuccess, setConfigSuccess] = useState('');
+  const [configError, setConfigError] = useState('');
+
   // Guard: somente ADMIN
   useEffect(() => {
     if (user && user.role !== 'ADMIN') {
@@ -139,8 +147,49 @@ export default function ConfiguracoesPage() {
     if (user?.role === 'ADMIN') {
       loadUsuarios();
       loadLogo();
+      loadConfigs();
     }
   }, [user]);
+
+  async function loadConfigs() {
+    try {
+      const res = await fetchWithAuth('/api/configuracoes/geral');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.configs && data.configs.COMISSAO_PADRAO) {
+          setComissaoPadrao(data.configs.COMISSAO_PADRAO);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar configurações gerais:', e);
+    }
+  }
+
+  async function saveConfig() {
+    setSavingConfig(true);
+    setConfigError('');
+    setConfigSuccess('');
+    try {
+      const res = await fetchWithAuth('/api/configuracoes/geral', {
+        method: 'POST',
+        body: JSON.stringify({
+          chave: 'COMISSAO_PADRAO',
+          valor: parseFloat(comissaoPadrao).toFixed(2)
+        })
+      });
+      if (res.ok) {
+        setConfigSuccess('Configurações salvas!');
+        setTimeout(() => setConfigSuccess(''), 3000);
+      } else {
+        const data = await res.json();
+        throw new Error(data.error || 'Erro ao salvar configurações');
+      }
+    } catch (e: any) {
+      setConfigError(e.message);
+    } finally {
+      setSavingConfig(false);
+    }
+  }
 
   // ── Usuários — funções ───────────────────────────────────────────────────
   async function loadUsuarios() {
@@ -166,7 +215,14 @@ export default function ConfiguracoesPage() {
 
   function openEdit(u: Usuario) {
     setEditingId(u.id);
-    setFormData({ nome: u.nome, email: u.email, senha: '', perfil: u.perfil, fone: u.fone || '' });
+    setFormData({
+      nome: u.nome,
+      email: u.email,
+      senha: '',
+      perfil: u.perfil,
+      fone: u.fone || '',
+      comissao_percentual: u.comissao_percentual !== null && u.comissao_percentual !== undefined ? u.comissao_percentual.toString() : ''
+    });
     setShowSenha(false);
     setUserError('');
     setModalOpen(true);
@@ -189,6 +245,7 @@ export default function ConfiguracoesPage() {
         email: formData.email,
         perfil: formData.perfil,
         fone: formData.fone || null,
+        comissao_percentual: formData.perfil === 'VENDEDOR' && formData.comissao_percentual !== '' ? parseFloat(formData.comissao_percentual) : null
       };
       if (formData.senha) body.senha = formData.senha;
 
@@ -334,7 +391,7 @@ export default function ConfiguracoesPage() {
           }`}
         >
           <Image className="w-4 h-4" />
-          Aparência
+          Aparência & Geral
         </button>
       </div>
 
@@ -509,129 +566,197 @@ export default function ConfiguracoesPage() {
         </div>
       )}
 
-      {/* ── Tab: Aparência ───────────────────────────────────────────────────── */}
+      {/* ── Tab: Aparência & Geral ─────────────────────────────────────────── */}
       {activeTab === 'aparencia' && (
-        <div className="space-y-6 max-w-2xl">
-          <div>
-            <h2 className="text-lg font-semibold">Logomarca do Sistema</h2>
-            <p className="text-sm text-muted-foreground">
-              A logomarca aparece no topo do menu lateral. Formatos aceitos: PNG, JPG, WebP, SVG (máx. 2MB).
-            </p>
-          </div>
-
-          {/* Preview da logo atual */}
-          <div className="rounded-2xl border border-border p-6 space-y-4">
-            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Logo Atual</p>
-            <div className="flex items-center gap-6">
-              <div className="w-24 h-24 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden">
-                {currentLogo ? (
-                  <img
-                    src={currentLogo}
-                    alt="Logo atual"
-                    className="w-full h-full object-contain p-2"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                    <Image className="w-8 h-8 opacity-30" />
-                    <span className="text-[10px]">Padrão</span>
-                  </div>
-                )}
-              </div>
-              <div className="flex-1">
-                {currentLogo ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">✓ Logo personalizada ativa</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={removeLogo}
-                      className="text-red-600 hover:text-red-700 border-red-200 hover:border-red-300 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Remover e usar padrão
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Usando a logomarca padrão do Connect Finance.</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Upload de nova logo */}
-          <div className="rounded-2xl border border-border p-6 space-y-4">
-            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Nova Logo</p>
-
-            {/* Drop zone */}
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-border hover:border-cyan-400 rounded-xl p-8 text-center cursor-pointer transition-all hover:bg-cyan-50/20 dark:hover:bg-cyan-900/10 group"
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
-                className="hidden"
-                onChange={handleLogoSelect}
-              />
-              <Upload className="w-8 h-8 text-muted-foreground/40 group-hover:text-cyan-500 mx-auto mb-2 transition-colors" />
-              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                Clique para selecionar uma imagem
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Coluna Logo */}
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold">Logomarca do Sistema</h2>
+              <p className="text-sm text-muted-foreground">
+                A logomarca aparece no topo do menu lateral. Formatos aceitos: PNG, JPG, WebP, SVG (máx. 2MB).
               </p>
-              <p className="text-xs text-muted-foreground/60 mt-1">PNG, JPG, WebP ou SVG • Máximo 2MB</p>
             </div>
 
-            {/* Preview da nova logo */}
-            {previewLogo && (
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/40 border border-border">
-                <div className="w-16 h-16 rounded-lg border border-border bg-background flex items-center justify-center overflow-hidden">
-                  <img src={previewLogo} alt="Preview" className="w-full h-full object-contain p-1" />
+            {/* Preview da logo atual */}
+            <div className="rounded-2xl border border-border p-6 space-y-4">
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Logo Atual</p>
+              <div className="flex items-center gap-6">
+                <div className="w-24 h-24 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden">
+                  {currentLogo ? (
+                    <img
+                      src={currentLogo}
+                      alt="Logo atual"
+                      className="w-full h-full object-contain p-2"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                      <Image className="w-8 h-8 opacity-30" />
+                      <span className="text-[10px]">Padrão</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium">{logoFile?.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {logoFile ? (logoFile.size / 1024).toFixed(1) + ' KB' : ''}
-                  </p>
+                  {currentLogo ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">✓ Logo personalizada ativa</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={removeLogo}
+                        className="text-red-600 hover:text-red-700 border-red-200 hover:border-red-300 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Remover e usar padrão
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Usando a logomarca padrão do Connect Finance.</p>
+                  )}
                 </div>
-                <button
-                  onClick={() => { setPreviewLogo(null); setLogoFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                  className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-                >
-                  <X className="w-4 h-4" />
-                </button>
               </div>
-            )}
+            </div>
 
-            {logoError && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                {logoError}
-              </div>
-            )}
-            {logoSuccess && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-sm">
-                <Check className="w-4 h-4 shrink-0" />
-                {logoSuccess}
-              </div>
-            )}
+            {/* Upload de nova logo */}
+            <div className="rounded-2xl border border-border p-6 space-y-4">
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Nova Logo</p>
 
-            <Button
-              onClick={uploadLogo}
-              disabled={!logoFile || uploadingLogo}
-              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0 disabled:opacity-50"
-            >
-              {uploadingLogo ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Enviando...
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Salvar Nova Logo
-                </>
+              {/* Drop zone */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-border hover:border-cyan-400 rounded-xl p-8 text-center cursor-pointer transition-all hover:bg-cyan-50/20 dark:hover:bg-cyan-900/10 group"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                  className="hidden"
+                  onChange={handleLogoSelect}
+                />
+                <Upload className="w-8 h-8 text-muted-foreground/40 group-hover:text-cyan-500 mx-auto mb-2 transition-colors" />
+                <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                  Clique para selecionar uma imagem
+                </p>
+                <p className="text-xs text-muted-foreground/60 mt-1">PNG, JPG, WebP ou SVG • Máximo 2MB</p>
+              </div>
+
+              {/* Preview da nova logo */}
+              {previewLogo && (
+                <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/40 border border-border">
+                  <div className="w-16 h-16 rounded-lg border border-border bg-background flex items-center justify-center overflow-hidden">
+                    <img src={previewLogo} alt="Preview" className="w-full h-full object-contain p-1" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{logoFile?.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {logoFile ? (logoFile.size / 1024).toFixed(1) + ' KB' : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setPreviewLogo(null); setLogoFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                    className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               )}
-            </Button>
+
+              {logoError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {logoError}
+                </div>
+              )}
+              {logoSuccess && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-sm">
+                  <Check className="w-4 h-4 shrink-0" />
+                  {logoSuccess}
+                </div>
+              )}
+
+              <Button
+                onClick={uploadLogo}
+                disabled={!logoFile || uploadingLogo}
+                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0 disabled:opacity-50"
+              >
+                {uploadingLogo ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Salvar Nova Logo
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Coluna Configurações Gerais */}
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold">Configurações Gerais</h2>
+              <p className="text-sm text-muted-foreground">
+                Parâmetros globais de funcionamento do sistema.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-border p-6 space-y-4">
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Comissões de Vendas</p>
+              
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                  Comissão Padrão do Sistema (%)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={comissaoPadrao}
+                    onChange={e => setComissaoPadrao(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-muted/20 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-sm font-bold"
+                    placeholder="5.00"
+                  />
+                  <span className="absolute right-4 top-3 text-xs text-muted-foreground font-semibold">%</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Taxa aplicada para vendedores que não possuem comissão individual configurada.
+                </p>
+              </div>
+
+              {configError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-medium">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {configError}
+                </div>
+              )}
+              {configSuccess && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                  <Check className="w-4 h-4 shrink-0" />
+                  {configSuccess}
+                </div>
+              )}
+
+              <Button
+                onClick={saveConfig}
+                disabled={savingConfig}
+                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0"
+              >
+                {savingConfig ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 mr-2" />
+                    Salvar Configurações
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -718,6 +843,27 @@ export default function ConfiguracoesPage() {
                   placeholder="(11) 99999-9999"
                 />
               </div>
+
+              {/* Comissão Individual — somente se perfil for Vendedor */}
+              {formData.perfil === 'VENDEDOR' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Comissão Individual (%)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.comissao_percentual}
+                      onChange={e => setFormData(f => ({ ...f, comissao_percentual: e.target.value }))}
+                      className="w-full px-3 py-2.5 rounded-xl border border-border bg-muted/30 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-sm font-bold animate-fade-in"
+                      placeholder="Deixe em branco para usar a comissão padrão"
+                    />
+                    <span className="absolute right-4 top-3 text-xs text-muted-foreground font-semibold">%</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Se vazio, assume a comissão padrão do sistema (atualmente {comissaoPadrao}%).
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-2">Perfil de Acesso <span className="text-red-500">*</span></label>

@@ -19,6 +19,8 @@ import {
   Package,
   Key,
   Settings,
+  Briefcase,
+  MessageCircle,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -110,13 +112,13 @@ function NavItem({ item, isActive, accentClass, dotClass, onClick }: {
 }
 
 // ─── Sidebar (desktop) ───────────────────────────────────────────────────────
-export function Sidebar() {
+export function Sidebar({ onChatClick, chatUnread = 0 }: { onChatClick?: () => void; chatUnread?: number }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
   const [isDark, setIsDark] = useState(false);
 
-  const perfil = user?.perfil || 'FINANCEIRO';
+  const perfil = user?.perfil || (user?.role === 'ADMIN' ? 'ADMIN' : 'FINANCEIRO');
   const isAdmin = user?.role === 'ADMIN';
 
   useEffect(() => {
@@ -197,6 +199,21 @@ export function Sidebar() {
           </>
         )}
 
+        {/* Comercial — ADMIN e VENDEDOR */}
+        {showClientes && (
+          <>
+            <div className="pt-3 pb-1">
+              <p className="px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Comercial</p>
+            </div>
+            <NavItem
+              item={{ icon: Briefcase, label: 'Painel Comercial', href: '/comercial' }}
+              isActive={pathname === '/comercial'}
+              accentClass="bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+              dotClass="text-amber-600 dark:text-amber-400"
+            />
+          </>
+        )}
+
         {/* Configurações — somente ADMIN */}
         {isAdmin && (
           <>
@@ -227,6 +244,40 @@ export function Sidebar() {
         <Button variant="ghost" className="w-full justify-start gap-3" onClick={toggleDarkMode}>
           {isDark ? <><Sun className="w-5 h-5" /><span>Modo Claro</span></> : <><Moon className="w-5 h-5" /><span>Modo Escuro</span></>}
         </Button>
+        {/* Botão Chat com Badge */}
+        <button
+          onClick={onChatClick}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
+            borderRadius: 12, background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--muted-foreground)', fontSize: 14, fontWeight: 500,
+            transition: 'all 0.2s', position: 'relative'
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.1)'; e.currentTarget.style.color = '#8b5cf6'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--muted-foreground)'; }}
+        >
+          <div style={{ position: 'relative' }}>
+            <MessageCircle size={20} />
+            {chatUnread > 0 && (
+              <span style={{
+                position: 'absolute', top: -6, right: -6,
+                background: '#8b5cf6', color: '#fff',
+                borderRadius: 20, fontSize: 9, fontWeight: 800,
+                padding: '1px 5px', minWidth: 16, textAlign: 'center',
+                boxShadow: '0 0 0 2px var(--background)',
+                animation: 'pulse 2s infinite'
+              }}>
+                {chatUnread > 99 ? '99+' : chatUnread}
+              </span>
+            )}
+          </div>
+          <span>Chat Interno</span>
+          {chatUnread > 0 && (
+            <span style={{ marginLeft: 'auto', background: 'rgba(139,92,246,0.15)', color: '#a78bfa', borderRadius: 20, fontSize: 10, fontWeight: 700, padding: '2px 7px' }}>
+              {chatUnread}
+            </span>
+          )}
+        </button>
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -241,14 +292,14 @@ export function Sidebar() {
 }
 
 // ─── MobileNav ───────────────────────────────────────────────────────────────
-export function MobileNav() {
+export function MobileNav({ onChatClick, chatUnread = 0 }: { onChatClick?: () => void; chatUnread?: number }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
   const [isDark, setIsDark] = useState(false);
 
-  const perfil = user?.perfil || 'FINANCEIRO';
+  const perfil = user?.perfil || (user?.role === 'ADMIN' ? 'ADMIN' : 'FINANCEIRO');
   const isAdmin = user?.role === 'ADMIN';
 
   useEffect(() => {
@@ -336,6 +387,22 @@ export function MobileNav() {
             </>
           )}
 
+          {/* Comercial — Mobile */}
+          {showClientes && (
+            <>
+              <div className="pt-3 pb-1">
+                <p className="px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Comercial</p>
+              </div>
+              <NavItem
+                item={{ icon: Briefcase, label: 'Painel Comercial', href: '/comercial' }}
+                isActive={pathname === '/comercial'}
+                accentClass="bg-gradient-to-r from-amber-500/10 to-orange-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                dotClass="text-amber-600 dark:text-amber-400"
+                onClick={() => setOpen(false)}
+              />
+            </>
+          )}
+
           {isAdmin && (
             <>
               <div className="pt-3 pb-1">
@@ -362,6 +429,22 @@ export function MobileNav() {
           <Button variant="ghost" className="w-full justify-start gap-3" onClick={toggleDarkMode}>
             {isDark ? <><Sun className="w-5 h-5" /><span>Modo Claro</span></> : <><Moon className="w-5 h-5" /><span>Modo Escuro</span></>}
           </Button>
+          {/* Botão Chat Mobile com Badge */}
+          <button
+            onClick={() => { onChatClick?.(); setOpen(false); }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', fontSize: 14, fontWeight: 500 }}
+          >
+            <div style={{ position: 'relative' }}>
+              <MessageCircle size={20} />
+              {chatUnread > 0 && (
+                <span style={{ position: 'absolute', top: -5, right: -5, background: '#8b5cf6', color: '#fff', borderRadius: 20, fontSize: 9, fontWeight: 800, padding: '1px 4px' }}>
+                  {chatUnread > 99 ? '99+' : chatUnread}
+                </span>
+              )}
+            </div>
+            <span>Chat Interno</span>
+            {chatUnread > 0 && <span style={{ marginLeft: 'auto', background: 'rgba(139,92,246,0.15)', color: '#a78bfa', borderRadius: 20, fontSize: 10, fontWeight: 700, padding: '2px 7px' }}>{chatUnread}</span>}
+          </button>
           <Button
             variant="ghost"
             className="w-full justify-start gap-3 text-red-600 hover:text-red-700 hover:bg-red-50"

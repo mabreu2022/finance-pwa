@@ -31,14 +31,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const tipo = searchParams.get('tipo');
     const status = searchParams.get('status');
+    const startDate = searchParams.get('startDate') || undefined;
+    const endDate = searchParams.get('endDate') || undefined;
 
     let contas;
     if (tipo) {
-      contas = await contasRepository.getByTipo(auth.user.tenantId, tipo);
+      contas = await contasRepository.getByTipo(auth.user.tenantId, tipo, startDate, endDate);
     } else if (status) {
+      // getByStatus doesn't have dates in this project, but we can also filter or keep as is.
       contas = await contasRepository.getByStatus(auth.user.tenantId, status);
     } else {
-      contas = await contasRepository.getAll(auth.user.tenantId);
+      contas = await contasRepository.getAll(auth.user.tenantId, startDate, endDate);
     }
 
     return NextResponse.json({ success: true, contas });

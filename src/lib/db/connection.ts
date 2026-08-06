@@ -137,10 +137,12 @@ export interface Usuario {
   email: string;
   senha: string;
   role: 'ADMIN' | 'USER';
+  perfil: 'ADMIN' | 'VENDEDOR' | 'FINANCEIRO';
   status: string;
   fone: string | null;
   ultimo_acesso: string | null;
   data_cadastro: string;
+  comissao_percentual?: number | null;
 }
 
 export interface ContaBancaria {
@@ -234,3 +236,46 @@ export interface Licenca {
   cliente_nome?: string;
   software_nome?: string;
 }
+
+export interface Proposta {
+  id: number;
+  tenant_id: number;
+  cliente_id: number;
+  usuario_id: number;
+  titulo: string;
+  valor: number;
+  estagio: 'PROSPECCAO' | 'PROPOSTA' | 'NEGOCIACAO' | 'GANHA' | 'PERDIDA';
+  descricao: string | null;
+  data_validade: string | null;
+  data_fechamento: string | null;
+  data_cadastro: string;
+  // campos de join (opcionais)
+  cliente_nome?: string;
+  usuario_nome?: string;
+}
+
+export interface GrupoChat {
+  id: number;
+  tenant_id: number;
+  nome: string;
+  tipo: 'GERAL' | 'DEPARTAMENTO' | 'PROJETO' | 'PRIVADO';
+  criado_por: number | null;
+  data_criacao: string;
+  nao_lidas?: number;
+  ultima_mensagem?: string;
+  ultima_mensagem_hora?: string;
+  membros?: number[];
+}
+
+export interface MensagemChat {
+  id: number;
+  tenant_id: number;
+  grupo_id: number;
+  usuario_id: number;
+  usuario_nome: string;
+  conteudo: string;
+  mencoes: string | null;
+  deletado: 'S' | 'N';
+  data_envio: string;
+}
+

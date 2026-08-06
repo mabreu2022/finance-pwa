@@ -45,7 +45,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     const body = await request.json();
-    const { nome, email, senha, perfil, status, fone } = body;
+    const { nome, email, senha, perfil, status, fone, comissao_percentual } = body;
 
     const updateData: any = {};
     if (nome)   updateData.nome   = nome;
@@ -57,6 +57,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
     if (status) updateData.status = status;
     if (fone !== undefined) updateData.fone = fone;
+    if (comissao_percentual !== undefined) {
+      updateData.comissao_percentual = comissao_percentual !== null && comissao_percentual !== '' 
+        ? parseFloat(String(comissao_percentual)) 
+        : null;
+    }
 
     await usuariosRepository.update(id, updateData);
     return NextResponse.json({ message: 'Usuário atualizado com sucesso' });

@@ -1,4 +1,4 @@
-import { query, execute, Plano, Tenant, Usuario, Conta, Agendamento, ContaBancaria, Cliente, Software, Licenca } from './connection';
+import { query, execute, Plano, Tenant, Usuario, Conta, Agendamento, ContaBancaria, Cliente, Software, Licenca, Proposta, GrupoChat, MensagemChat } from './connection';
 
 export const planosRepository = {
   async getAll(): Promise<Plano[]> {
@@ -142,7 +142,8 @@ export const usuariosRepository = {
       status: row.STATUS,
       fone: row.FONE,
       ultimo_acesso: row.ULTIMO_ACESSO,
-      data_cadastro: row.DATA_CADASTRO
+      data_cadastro: row.DATA_CADASTRO,
+      comissao_percentual: row.COMISSAO_PERCENTUAL ? Number(row.COMISSAO_PERCENTUAL) : null
     };
   },
 
@@ -161,7 +162,8 @@ export const usuariosRepository = {
       status: row.STATUS,
       fone: row.FONE,
       ultimo_acesso: row.ULTIMO_ACESSO,
-      data_cadastro: row.DATA_CADASTRO
+      data_cadastro: row.DATA_CADASTRO,
+      comissao_percentual: row.COMISSAO_PERCENTUAL ? Number(row.COMISSAO_PERCENTUAL) : null
     };
   },
 
@@ -183,7 +185,8 @@ export const usuariosRepository = {
       status: row.STATUS,
       fone: row.FONE,
       ultimo_acesso: row.ULTIMO_ACESSO,
-      data_cadastro: row.DATA_CADASTRO
+      data_cadastro: row.DATA_CADASTRO,
+      comissao_percentual: row.COMISSAO_PERCENTUAL ? Number(row.COMISSAO_PERCENTUAL) : null
     }));
   },
 
@@ -191,18 +194,19 @@ export const usuariosRepository = {
     await execute('UPDATE USUARIOS SET ULTIMO_ACESSO = CURRENT_TIMESTAMP WHERE ID = ?', [id]);
   },
 
-  async create(usuario: { tenant_id: number; nome: string; email: string; senha: string; role: 'ADMIN' | 'USER'; perfil?: string; status: string; fone: string | null }): Promise<number> {
+  async create(usuario: { tenant_id: number; nome: string; email: string; senha: string; role: 'ADMIN' | 'USER'; perfil?: string; status: string; fone: string | null; comissao_percentual?: number | null }): Promise<number> {
     const perfil = usuario.perfil || (usuario.role === 'ADMIN' ? 'ADMIN' : 'FINANCEIRO');
-    const sql = `INSERT INTO USUARIOS (TENANT_ID, NOME, EMAIL, SENHA, ROLE, PERFIL, STATUS, FONE)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING ID`;
+    const comissao = usuario.comissao_percentual !== undefined ? usuario.comissao_percentual : null;
+    const sql = `INSERT INTO USUARIOS (TENANT_ID, NOME, EMAIL, SENHA, ROLE, PERFIL, STATUS, FONE, COMISSAO_PERCENTUAL)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING ID`;
     const result = (await query(sql, [
       usuario.tenant_id, usuario.nome, usuario.email,
-      usuario.senha, usuario.role, perfil, usuario.status, usuario.fone
+      usuario.senha, usuario.role, perfil, usuario.status, usuario.fone, comissao
     ])) as any;
     return result.ID || result[0]?.ID;
   },
 
-  async update(id: number, data: { nome?: string; email?: string; senha?: string; role?: 'ADMIN' | 'USER'; perfil?: string; status?: string; fone?: string | null }): Promise<void> {
+  async update(id: number, data: { nome?: string; email?: string; senha?: string; role?: 'ADMIN' | 'USER'; perfil?: string; status?: string; fone?: string | null; comissao_percentual?: number | null }): Promise<void> {
     const fields: string[] = [];
     const params: any[] = [];
 
@@ -213,6 +217,7 @@ export const usuariosRepository = {
     if (data.perfil !== undefined) { fields.push('PERFIL = ?'); params.push(data.perfil); }
     if (data.status !== undefined) { fields.push('STATUS = ?'); params.push(data.status); }
     if (data.fone !== undefined)   { fields.push('FONE = ?');   params.push(data.fone); }
+    if (data.comissao_percentual !== undefined) { fields.push('COMISSAO_PERCENTUAL = ?'); params.push(data.comissao_percentual); }
 
     if (fields.length === 0) return;
     params.push(id);
@@ -349,13 +354,35 @@ export const contasBancariasRepository = {
 };
 
 export const contasRepository = {
-  async getAll(tenantId: number): Promise<Conta[]> {
-    const rows = (await query('SELECT * FROM CONTAS WHERE TENANT_ID = ? ORDER BY DATA_CADASTRO DESC', [tenantId])) as any[];
+  async getAll(tenantId: number, startDate?: string, endDate?: string): Promise<Conta[]> {
+    let sql = 'SELECT * FROM CONTAS WHERE TENANT_ID = ?';
+    const params: any[] = [tenantId];
+    if (startDate) {
+      sql += ' AND DATA_VENCIMENTO >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      sql += ' AND DATA_VENCIMENTO <= ?';
+      params.push(endDate);
+    }
+    sql += ' ORDER BY DATA_CADASTRO DESC';
+    const rows = (await query(sql, params)) as any[];
     return rows.map(mapRowToConta);
   },
 
-  async getByTipo(tenantId: number, tipo: string): Promise<Conta[]> {
-    const rows = (await query('SELECT * FROM CONTAS WHERE TENANT_ID = ? AND TIPO = ? ORDER BY DATA_CADASTRO DESC', [tenantId, tipo])) as any[];
+  async getByTipo(tenantId: number, tipo: string, startDate?: string, endDate?: string): Promise<Conta[]> {
+    let sql = 'SELECT * FROM CONTAS WHERE TENANT_ID = ? AND TIPO = ?';
+    const params: any[] = [tenantId, tipo];
+    if (startDate) {
+      sql += ' AND DATA_VENCIMENTO >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      sql += ' AND DATA_VENCIMENTO <= ?';
+      params.push(endDate);
+    }
+    sql += ' ORDER BY DATA_CADASTRO DESC';
+    const rows = (await query(sql, params)) as any[];
     return rows.map(mapRowToConta);
   },
 
@@ -935,4 +962,396 @@ export const licencasRepository = {
       console.error('Erro ao processar automações de licenças:', err);
     }
   }
+};
+
+function mapRowToProposta(row: any): Proposta {
+  return {
+    id: row.ID,
+    tenant_id: row.TENANT_ID,
+    cliente_id: row.CLIENTE_ID,
+    usuario_id: row.USUARIO_ID,
+    titulo: row.TITULO,
+    valor: Number(row.VALOR || 0),
+    estagio: row.ESTAGIO,
+    descricao: row.DESCRICAO ? (row.DESCRICAO.toString ? row.DESCRICAO.toString() : String(row.DESCRICAO)) : null,
+    data_validade: row.DATA_VALIDADE || null,
+    data_fechamento: row.DATA_FECHAMENTO || null,
+    data_cadastro: row.DATA_CADASTRO,
+    cliente_nome: row.CLIENTE_NOME || undefined,
+    usuario_nome: row.USUARIO_NOME || undefined,
+  };
+}
+
+export const propostasRepository = {
+  async getAll(tenantId: number, filters?: { startDate?: string; endDate?: string; estagio?: string; usuarioId?: number }): Promise<Proposta[]> {
+    let sql = `
+      SELECT p.*, c.nome AS CLIENTE_NOME, u.nome AS USUARIO_NOME 
+      FROM PROPOSTAS p
+      JOIN CLIENTES c ON p.cliente_id = c.id
+      JOIN USUARIOS u ON p.usuario_id = u.id
+      WHERE p.tenant_id = ?
+    `;
+    const params: any[] = [tenantId];
+
+    if (filters?.startDate) {
+      sql += ' AND p.data_cadastro >= ?';
+      params.push(filters.startDate);
+    }
+    if (filters?.endDate) {
+      sql += ' AND p.data_cadastro <= ?';
+      params.push(filters.endDate);
+    }
+    if (filters?.estagio) {
+      sql += ' AND p.estagio = ?';
+      params.push(filters.estagio);
+    }
+    if (filters?.usuarioId) {
+      sql += ' AND p.usuario_id = ?';
+      params.push(filters.usuarioId);
+    }
+
+    sql += ' ORDER BY p.data_cadastro DESC';
+    const rows = (await query(sql, params)) as any[];
+    return rows.map(mapRowToProposta);
+  },
+
+  async getById(id: number, tenantId: number): Promise<Proposta | undefined> {
+    const sql = `
+      SELECT p.*, c.nome AS CLIENTE_NOME, u.nome AS USUARIO_NOME 
+      FROM PROPOSTAS p
+      JOIN CLIENTES c ON p.cliente_id = c.id
+      JOIN USUARIOS u ON p.usuario_id = u.id
+      WHERE p.id = ? AND p.tenant_id = ?
+    `;
+    const rows = (await query(sql, [id, tenantId])) as any[];
+    if (rows.length === 0) return undefined;
+    return mapRowToProposta(rows[0]);
+  },
+
+  async create(proposta: Omit<Proposta, 'id' | 'data_cadastro'>): Promise<number> {
+    const sql = `
+      INSERT INTO PROPOSTAS (TENANT_ID, CLIENTE_ID, USUARIO_ID, TITULO, VALOR, ESTAGIO, DESCRICAO, DATA_VALIDADE, DATA_FECHAMENTO)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING ID
+    `;
+    const params = [
+      proposta.tenant_id,
+      proposta.cliente_id,
+      proposta.usuario_id,
+      proposta.titulo,
+      proposta.valor,
+      proposta.estagio,
+      proposta.descricao || null,
+      proposta.data_validade || null,
+      proposta.data_fechamento || null,
+    ];
+    const result = (await query(sql, params)) as any;
+    return result.ID || result[0]?.ID;
+  },
+
+  async update(id: number, tenantId: number, proposta: Partial<Proposta>): Promise<void> {
+    const fields: string[] = [];
+    const params: any[] = [];
+
+    const allowedFields: (keyof Proposta)[] = [
+      'cliente_id', 'usuario_id', 'titulo', 'valor', 'estagio', 'descricao', 'data_validade', 'data_fechamento'
+    ];
+
+    for (const key of allowedFields) {
+      if (proposta[key] !== undefined) {
+        fields.push(`${key.toUpperCase()} = ?`);
+        params.push(proposta[key]);
+      }
+    }
+
+    if (fields.length === 0) return;
+
+    params.push(id, tenantId);
+    const sql = `UPDATE PROPOSTAS SET ${fields.join(', ')} WHERE ID = ? AND TENANT_ID = ?`;
+    await execute(sql, params);
+  },
+
+  async delete(id: number, tenantId: number): Promise<void> {
+    await execute('DELETE FROM PROPOSTAS WHERE ID = ? AND TENANT_ID = ?', [id, tenantId]);
+  },
+
+  async getStats(tenantId: number, filters?: { startDate?: string; endDate?: string; usuarioId?: number }) {
+    let sqlBase = 'FROM PROPOSTAS WHERE tenant_id = ?';
+    const params: any[] = [tenantId];
+
+    if (filters?.startDate) {
+      sqlBase += ' AND data_cadastro >= ?';
+      params.push(filters.startDate);
+    }
+    if (filters?.endDate) {
+      sqlBase += ' AND data_cadastro <= ?';
+      params.push(filters.endDate);
+    }
+    if (filters?.usuarioId) {
+      sqlBase += ' AND usuario_id = ?';
+      params.push(filters.usuarioId);
+    }
+
+    // 0. Buscar comissão padrão do tenant
+    let comissaoPadrao = 5.0;
+    try {
+      const configRows = await query("SELECT VALOR FROM CONFIGURACOES WHERE TENANT_ID = ? AND CHAVE = 'COMISSAO_PADRAO'", [tenantId]) as any[];
+      if (configRows.length > 0 && configRows[0].VALOR) {
+        comissaoPadrao = Number(configRows[0].VALOR);
+      }
+    } catch (e) {
+      // usa padrão 5%
+    }
+
+    // 1. Totais por estágio
+    const stagesSql = `SELECT ESTAGIO, SUM(VALOR) AS TOTAL_VALOR, COUNT(ID) AS TOTAL_COUNT ${sqlBase} GROUP BY ESTAGIO`;
+    const stagesRows = (await query(stagesSql, params)) as any[];
+    
+    // 2. Total geral de vendas ganhas
+    const wonSql = `SELECT SUM(VALOR) AS TOTAL_GANHO, COUNT(ID) AS COUNT_GANHO ${sqlBase} AND ESTAGIO = 'GANHA'`;
+    const wonRows = (await query(wonSql, params)) as any[];
+
+    // 3. Taxa de conversão
+    const totalFinishedSql = `SELECT COUNT(ID) AS TOTAL_FIN ${sqlBase} AND ESTAGIO IN ('GANHA', 'PERDIDA')`;
+    const totalFinishedRows = (await query(totalFinishedSql, params)) as any[];
+
+    // 4. Propostas ganhas com comissão individual do vendedor — simples sem COALESCE parametrizado
+    let propsSql = `
+      SELECT p.valor, u.comissao_percentual 
+      FROM PROPOSTAS p
+      JOIN USUARIOS u ON p.usuario_id = u.id
+      WHERE p.tenant_id = ? AND p.estagio = 'GANHA'
+    `;
+    const propsParams: any[] = [tenantId];
+    if (filters?.startDate) {
+      propsSql += ' AND p.data_cadastro >= ?';
+      propsParams.push(filters.startDate);
+    }
+    if (filters?.endDate) {
+      propsSql += ' AND p.data_cadastro <= ?';
+      propsParams.push(filters.endDate);
+    }
+    if (filters?.usuarioId) {
+      propsSql += ' AND p.usuario_id = ?';
+      propsParams.push(filters.usuarioId);
+    }
+    const propsRows = await query(propsSql, propsParams) as any[];
+    
+    // Calcular comissão total em JS (seguro — sem query complexa no Firebird)
+    let comissaoTotal = 0;
+    for (const pRow of propsRows) {
+      const rate = (pRow.COMISSAO_PERCENTUAL !== null && pRow.COMISSAO_PERCENTUAL !== undefined)
+        ? Number(pRow.COMISSAO_PERCENTUAL) 
+        : comissaoPadrao;
+      comissaoTotal += Number(pRow.VALOR || 0) * (rate / 100);
+    }
+    
+    // 5. Ranking de vendedores — query simples sem COALESCE parametrizado
+    let sellerSql = `
+      SELECT u.nome AS VENDEDOR_NOME, u.comissao_percentual AS COMISSAO_IND,
+             p.usuario_id AS VENDEDOR_ID,
+             SUM(CASE WHEN p.estagio = 'GANHA' THEN p.valor ELSE 0 END) AS TOTAL_VALOR, 
+             SUM(CASE WHEN p.estagio = 'GANHA' THEN 1 ELSE 0 END) AS TOTAL_COUNT
+      FROM PROPOSTAS p
+      JOIN USUARIOS u ON p.usuario_id = u.id
+      WHERE p.tenant_id = ?
+    `;
+    const sellerParams: any[] = [tenantId];
+    if (filters?.startDate) {
+      sellerSql += ' AND p.data_cadastro >= ?';
+      sellerParams.push(filters.startDate);
+    }
+    if (filters?.endDate) {
+      sellerSql += ' AND p.data_cadastro <= ?';
+      sellerParams.push(filters.endDate);
+    }
+    if (filters?.usuarioId) {
+      sellerSql += ' AND p.usuario_id = ?';
+      sellerParams.push(filters.usuarioId);
+    }
+    sellerSql += ' GROUP BY u.nome, u.comissao_percentual, p.usuario_id ORDER BY TOTAL_VALOR DESC';
+    const sellerRows = (await query(sellerSql, sellerParams)) as any[];
+
+    return {
+      stages: stagesRows.map(r => ({
+        estagio: r.ESTAGIO,
+        valor: Number(r.TOTAL_VALOR || 0),
+        quantidade: Number(r.TOTAL_COUNT || 0)
+      })),
+      wonTotal: Number(wonRows[0]?.TOTAL_GANHO || 0),
+      wonCount: Number(wonRows[0]?.COUNT_GANHO || 0),
+      totalFinished: Number(totalFinishedRows[0]?.TOTAL_FIN || 0),
+      comissaoTotal: Math.round(comissaoTotal * 100) / 100,
+      comissaoPadrao,
+      sellers: sellerRows.map(r => {
+        const rate = (r.COMISSAO_IND !== null && r.COMISSAO_IND !== undefined) 
+          ? Number(r.COMISSAO_IND) 
+          : comissaoPadrao;
+        const totalValor = Number(r.TOTAL_VALOR || 0);
+        return {
+          vendedorNome: r.VENDEDOR_NOME,
+          vendedorId: r.VENDEDOR_ID,
+          valor: totalValor,
+          quantidade: Number(r.TOTAL_COUNT || 0),
+          comissao: Math.round(totalValor * (rate / 100) * 100) / 100
+        };
+      })
+    };
+  }
+};
+
+export const chatRepository = {
+  // ── GRUPOS ───────────────────────────────────────────────────────
+  async getGrupos(tenantId: number, usuarioId: number): Promise<GrupoChat[]> {
+    // Retorna grupos que o usuário é membro OU grupos globais (GERAL/DEPARTAMENTO)
+    const rows = await query(`
+      SELECT DISTINCT g.ID, g.NOME, g.TIPO, g.CRIADO_POR, g.DATA_CRIACAO,
+        (SELECT FIRST 1 m.CONTEUDO FROM MENSAGENS_CHAT m WHERE m.GRUPO_ID = g.ID AND m.DELETADO = 'N' ORDER BY m.DATA_ENVIO DESC) AS ULTIMA_MSG,
+        (SELECT FIRST 1 m.DATA_ENVIO FROM MENSAGENS_CHAT m WHERE m.GRUPO_ID = g.ID AND m.DELETADO = 'N' ORDER BY m.DATA_ENVIO DESC) AS ULTIMA_HORA
+      FROM GRUPOS_CHAT g
+      LEFT JOIN MEMBROS_GRUPO mg ON mg.GRUPO_ID = g.ID AND mg.USUARIO_ID = ?
+      WHERE g.TENANT_ID = ? AND (g.TIPO IN ('GERAL', 'DEPARTAMENTO') OR mg.USUARIO_ID IS NOT NULL)
+      ORDER BY ULTIMA_HORA DESC NULLS LAST, g.NOME
+    `, [usuarioId, tenantId]) as any[];
+
+    // Para cada grupo, contar mensagens não lidas
+    const result: GrupoChat[] = [];
+    for (const r of rows) {
+      const leituraRows = await query(
+        `SELECT ULTIMA_LEITURA FROM LEITURAS_CHAT WHERE USUARIO_ID = ? AND GRUPO_ID = ?`,
+        [usuarioId, r.ID]
+      ) as any[];
+      const ultimaLeitura = leituraRows.length > 0 ? leituraRows[0].ULTIMA_LEITURA : null;
+
+      let naoLidas = 0;
+      if (ultimaLeitura) {
+        const nlRows = await query(
+          `SELECT COUNT(ID) AS CNT FROM MENSAGENS_CHAT WHERE GRUPO_ID = ? AND DELETADO = 'N' AND USUARIO_ID <> ? AND DATA_ENVIO > ?`,
+          [r.ID, usuarioId, ultimaLeitura]
+        ) as any[];
+        naoLidas = Number(nlRows[0]?.CNT || 0);
+      } else {
+        const nlRows = await query(
+          `SELECT COUNT(ID) AS CNT FROM MENSAGENS_CHAT WHERE GRUPO_ID = ? AND DELETADO = 'N' AND USUARIO_ID <> ?`,
+          [r.ID, usuarioId]
+        ) as any[];
+        naoLidas = Number(nlRows[0]?.CNT || 0);
+      }
+
+      result.push({
+        id: r.ID,
+        tenant_id: tenantId,
+        nome: r.NOME,
+        tipo: r.TIPO,
+        criado_por: r.CRIADO_POR,
+        data_criacao: r.DATA_CRIACAO,
+        nao_lidas: naoLidas,
+        ultima_mensagem: r.ULTIMA_MSG || null,
+        ultima_mensagem_hora: r.ULTIMA_HORA || null,
+      });
+    }
+    return result;
+  },
+
+  async criarGrupo(tenantId: number, usuarioId: number, nome: string, tipo: string, membroIds: number[]): Promise<GrupoChat> {
+    await execute(
+      `INSERT INTO GRUPOS_CHAT (TENANT_ID, NOME, TIPO, CRIADO_POR) VALUES (?, ?, ?, ?)`,
+      [tenantId, nome, tipo, usuarioId]
+    );
+    const rows = await query(
+      `SELECT FIRST 1 ID FROM GRUPOS_CHAT WHERE TENANT_ID = ? ORDER BY ID DESC`,
+      [tenantId]
+    ) as any[];
+    const grupoId = rows[0].ID;
+
+    // Adicionar membros (sempre incluir criador)
+    const todos = Array.from(new Set([usuarioId, ...membroIds]));
+    for (const mid of todos) {
+      await execute(`INSERT INTO MEMBROS_GRUPO (GRUPO_ID, USUARIO_ID) VALUES (?, ?)`, [grupoId, mid]);
+    }
+    return { id: grupoId, tenant_id: tenantId, nome, tipo: tipo as any, criado_por: usuarioId, data_criacao: new Date().toISOString() };
+  },
+
+  // ── MENSAGENS ─────────────────────────────────────────────────────
+  async getMensagens(grupoId: number, tenantId: number, limit = 50): Promise<MensagemChat[]> {
+    const rows = await query(`
+      SELECT FIRST ${limit} m.ID, m.TENANT_ID, m.GRUPO_ID, m.USUARIO_ID,
+        u.NOME AS USUARIO_NOME, m.CONTEUDO, m.MENCOES, m.DELETADO, m.DATA_ENVIO
+      FROM MENSAGENS_CHAT m
+      JOIN USUARIOS u ON u.ID = m.USUARIO_ID
+      WHERE m.GRUPO_ID = ? AND m.TENANT_ID = ? AND m.DELETADO = 'N'
+      ORDER BY m.DATA_ENVIO DESC
+    `, [grupoId, tenantId]) as any[];
+
+    return rows.reverse().map((r: any) => ({
+      id: r.ID,
+      tenant_id: r.TENANT_ID,
+      grupo_id: r.GRUPO_ID,
+      usuario_id: r.USUARIO_ID,
+      usuario_nome: r.USUARIO_NOME,
+      conteudo: r.CONTEUDO,
+      mencoes: r.MENCOES,
+      deletado: r.DELETADO,
+      data_envio: r.DATA_ENVIO,
+    }));
+  },
+
+  async enviarMensagem(tenantId: number, grupoId: number, usuarioId: number, conteudo: string, mencoes: string): Promise<MensagemChat> {
+    await execute(
+      `INSERT INTO MENSAGENS_CHAT (TENANT_ID, GRUPO_ID, USUARIO_ID, CONTEUDO, MENCOES) VALUES (?, ?, ?, ?, ?)`,
+      [tenantId, grupoId, usuarioId, conteudo, mencoes || null]
+    );
+    const rows = await query(
+      `SELECT FIRST 1 m.ID, m.DATA_ENVIO, u.NOME AS USUARIO_NOME FROM MENSAGENS_CHAT m JOIN USUARIOS u ON u.ID = m.USUARIO_ID WHERE m.GRUPO_ID = ? AND m.USUARIO_ID = ? ORDER BY m.ID DESC`,
+      [grupoId, usuarioId]
+    ) as any[];
+    return {
+      id: rows[0].ID,
+      tenant_id: tenantId,
+      grupo_id: grupoId,
+      usuario_id: usuarioId,
+      usuario_nome: rows[0].USUARIO_NOME,
+      conteudo,
+      mencoes: mencoes || null,
+      deletado: 'N',
+      data_envio: rows[0].DATA_ENVIO,
+    };
+  },
+
+  async deletarMensagem(msgId: number, usuarioId: number): Promise<void> {
+    await execute(`UPDATE MENSAGENS_CHAT SET DELETADO = 'S' WHERE ID = ? AND USUARIO_ID = ?`, [msgId, usuarioId]);
+  },
+
+  // ── LEITURAS / NÃO LIDAS ─────────────────────────────────────────
+  async marcarComoLido(usuarioId: number, grupoId: number): Promise<void> {
+    const existing = await query(`SELECT ID FROM LEITURAS_CHAT WHERE USUARIO_ID = ? AND GRUPO_ID = ?`, [usuarioId, grupoId]) as any[];
+    if (existing.length > 0) {
+      await execute(`UPDATE LEITURAS_CHAT SET ULTIMA_LEITURA = CURRENT_TIMESTAMP WHERE USUARIO_ID = ? AND GRUPO_ID = ?`, [usuarioId, grupoId]);
+    } else {
+      await execute(`INSERT INTO LEITURAS_CHAT (USUARIO_ID, GRUPO_ID) VALUES (?, ?)`, [usuarioId, grupoId]);
+    }
+  },
+
+  async totalNaoLidas(tenantId: number, usuarioId: number): Promise<number> {
+    // Pega IDs de todos os grupos visíveis pelo usuário
+    const grupos = await query(`
+      SELECT DISTINCT g.ID FROM GRUPOS_CHAT g
+      LEFT JOIN MEMBROS_GRUPO mg ON mg.GRUPO_ID = g.ID AND mg.USUARIO_ID = ?
+      WHERE g.TENANT_ID = ? AND (g.TIPO IN ('GERAL', 'DEPARTAMENTO') OR mg.USUARIO_ID IS NOT NULL)
+    `, [usuarioId, tenantId]) as any[];
+
+    let total = 0;
+    for (const g of grupos) {
+      const leituraRows = await query(`SELECT ULTIMA_LEITURA FROM LEITURAS_CHAT WHERE USUARIO_ID = ? AND GRUPO_ID = ?`, [usuarioId, g.ID]) as any[];
+      const ultimaLeitura = leituraRows.length > 0 ? leituraRows[0].ULTIMA_LEITURA : null;
+      if (ultimaLeitura) {
+        const rows = await query(`SELECT COUNT(ID) AS CNT FROM MENSAGENS_CHAT WHERE GRUPO_ID = ? AND DELETADO = 'N' AND USUARIO_ID <> ? AND DATA_ENVIO > ?`, [g.ID, usuarioId, ultimaLeitura]) as any[];
+        total += Number(rows[0]?.CNT || 0);
+      } else {
+        const rows = await query(`SELECT COUNT(ID) AS CNT FROM MENSAGENS_CHAT WHERE GRUPO_ID = ? AND DELETADO = 'N' AND USUARIO_ID <> ?`, [g.ID, usuarioId]) as any[];
+        total += Number(rows[0]?.CNT || 0);
+      }
+    }
+    return total;
+  },
 };
