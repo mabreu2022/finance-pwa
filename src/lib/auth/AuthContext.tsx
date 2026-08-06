@@ -7,6 +7,7 @@ interface User {
   nome: string;
   email: string;
   role: 'ADMIN' | 'USER';
+  perfil: 'ADMIN' | 'VENDEDOR' | 'FINANCEIRO';
   tenantId: number;
   tenantNome: string;
 }
@@ -139,11 +140,14 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     throw new Error('Não autenticado');
   }
   
-  const headers = {
+  const headers: Record<string, string> = {
     ...options.headers,
     'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  };
+  } as any;
+
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const response = await fetch(url, { ...options, headers });
   

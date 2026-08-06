@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Registrar tenant
-    const result = registerTenant(validation.data);
+    const result = await registerTenant(validation.data);
     
     if (!result.success) {
       return NextResponse.json(

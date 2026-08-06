@@ -9,6 +9,7 @@ export interface TokenPayload {
   tenantId: number;
   email: string;
   role: 'ADMIN' | 'USER';
+  perfil: 'ADMIN' | 'VENDEDOR' | 'FINANCEIRO';
   nome: string;
   tenantNome: string;
 }
@@ -62,6 +63,9 @@ export async function login(email: string, senha: string, tenantId?: number) {
     // Atualizar último acesso
     await usuariosRepository.updateUltimoAcesso(usuario.id);
 
+    const perfil = (usuario.perfil as 'ADMIN' | 'VENDEDOR' | 'FINANCEIRO') || 
+      (usuario.role === 'ADMIN' ? 'ADMIN' : 'FINANCEIRO');
+
     return {
       success: true,
       user: {
@@ -69,6 +73,7 @@ export async function login(email: string, senha: string, tenantId?: number) {
         nome: usuario.nome,
         email: usuario.email,
         role: usuario.role,
+        perfil,
         tenantId: usuario.tenant_id,
         tenantNome: tenant.nome
       }
@@ -79,3 +84,51 @@ export async function login(email: string, senha: string, tenantId?: number) {
   }
 }
 
+export async function registerTenant(data: {
+  nome: string;
+  cnpj?: string;
+  email: string;
+  senha: string;
+  nomeAdmin: string;
+  planoId?: number;
+}): Promise<{ success: boolean; error?: string; tenantId?: number; userId?: number }> {
+  try {
+    // Verificar se o e-mail já existe
+    const existente = await usuariosRepository.getByEmail(data.email);
+    if (existente) {
+      return { success: false, error: 'E-mail já cadastrado no sistema' };
+    }
+
+    // Criar tenant
+    const tenantId = await tenantsRepository.create({
+      nome: data.nome,
+      cnpj: data.cnpj || null,
+      nome_fantasia: null,
+      email_admin: data.email,
+      telefone: null,
+      endereco: null,
+      dominio: null,
+      status: 'ATIVO',
+      plano_id: data.planoId || null,
+      limite_usuarios: 5,
+      data_expiracao: null,
+    });
+
+    // Criar usuário admin
+    const senhaBase64 = Buffer.from(data.senha).toString('base64');
+    const userId = await usuariosRepository.create({
+      tenant_id: tenantId,
+      nome: data.nomeAdmin,
+      email: data.email,
+      senha: senhaBase64,
+      role: 'ADMIN',
+      status: 'ATIVO',
+      fone: null,
+    });
+
+    return { success: true, tenantId, userId };
+  } catch (error) {
+    console.error('Erro ao registrar tenant:', error);
+    return { success: false, error: 'Erro ao criar conta' };
+  }
+}

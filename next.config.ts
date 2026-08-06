@@ -10,6 +10,17 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: [
+          '**/public/database/**',
+        ],
+      };
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

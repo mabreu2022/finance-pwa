@@ -48,30 +48,56 @@ export async function closeDatabase() {
 }
 
 export async function query(sql: string, params: any[] = []) {
-  const db = await getDatabase();
+  let db: any;
+  try {
+    db = await getDatabase();
+  } catch (err) {
+    dbConnection = null;
+    throw err;
+  }
   return new Promise((resolve, reject) => {
-    db.query(sql, params, (err: any, result: any) => {
-      if (err) {
-        console.error('Erro na query:', sql, err);
-        reject(err);
-      } else {
-        resolve(result || []);
-      }
-    });
+    try {
+      db.query(sql, params, (err: any, result: any) => {
+        if (err) {
+          console.error('Erro na query:', sql, err);
+          dbConnection = null;
+          reject(err);
+        } else {
+          resolve(result || []);
+        }
+      });
+    } catch (err) {
+      console.error('Erro síncrono na query:', err);
+      dbConnection = null;
+      reject(err);
+    }
   });
 }
 
 export async function execute(sql: string, params: any[] = []) {
-  const db = await getDatabase();
+  let db: any;
+  try {
+    db = await getDatabase();
+  } catch (err) {
+    dbConnection = null;
+    throw err;
+  }
   return new Promise((resolve, reject) => {
-    db.query(sql, params, (err: any, result: any) => {
-      if (err) {
-        console.error('Erro ao executar:', sql, err);
-        reject(err);
-      } else {
-        resolve(result);
-      }
-    });
+    try {
+      db.query(sql, params, (err: any, result: any) => {
+        if (err) {
+          console.error('Erro ao executar:', sql, err);
+          dbConnection = null;
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      });
+    } catch (err) {
+      console.error('Erro síncrono ao executar:', err);
+      dbConnection = null;
+      reject(err);
+    }
   });
 }
 
@@ -117,10 +143,22 @@ export interface Usuario {
   data_cadastro: string;
 }
 
+export interface ContaBancaria {
+  id: number;
+  tenant_id: number;
+  nome: string;
+  tipo: 'CORRENTE' | 'POUPANCA' | 'INVESTIMENTO' | 'DINHEIRO' | 'OUTRO';
+  saldo_inicial: number;
+  saldo_atual: number;
+  ativo: 'S' | 'N';
+  data_cadastro: string;
+}
+
 export interface Conta {
   id: number;
   tenant_id: number;
   usuario_id: number;
+  conta_bancaria_id: number | null;
   descricao: string;
   valor: number;
   data_vencimento: string;
@@ -129,6 +167,8 @@ export interface Conta {
   status: 'PENDENTE' | 'PAGO' | 'RECEBIDO' | 'ATRASADO';
   tipo: 'PAGAR' | 'RECEBER';
   observacoes: string | null;
+  arquivo_boleto: string | null;
+  arquivo_comprovante: string | null;
   data_cadastro: string;
 }
 
@@ -146,4 +186,51 @@ export interface Agendamento {
   ultima_execucao: string | null;
   proxima_execucao: string | null;
   data_cadastro: string;
+}
+
+export interface Cliente {
+  id: number;
+  tenant_id: number;
+  tipo: 'PF' | 'PJ';
+  nome: string;
+  nome_fantasia: string | null;
+  cpf_cnpj: string | null;
+  email: string | null;
+  telefone: string | null;
+  endereco: string | null;
+  observacoes: string | null;
+  ativo: 'S' | 'N';
+  data_cadastro: string;
+}
+
+export interface Software {
+  id: number;
+  tenant_id: number;
+  nome: string;
+  descricao: string | null;
+  categoria: string | null;
+  ativo: 'S' | 'N';
+  data_cadastro: string;
+}
+
+export interface Licenca {
+  id: number;
+  tenant_id: number;
+  cliente_id: number;
+  software_id: number;
+  conta_bancaria_id: number | null;
+  descricao: string;
+  valor: number;
+  periodicidade: 'MENSAL' | 'BIMESTRAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL';
+  dia_vencimento: number;
+  data_inicio: string;
+  data_fim: string | null;
+  status: 'ATIVA' | 'SUSPENSA' | 'CANCELADA';
+  gerar_conta_auto: 'S' | 'N';
+  ultima_geracao: string | null;
+  observacoes: string | null;
+  data_cadastro: string;
+  // campos de join (opcionais)
+  cliente_nome?: string;
+  software_nome?: string;
 }

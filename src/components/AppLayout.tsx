@@ -5,6 +5,20 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { Sidebar, MobileNav } from './sidebar';
 
+// Mapa de rotas permitidas por perfil
+const PERFIL_ROUTES: Record<string, string[]> = {
+  ADMIN: ['*'], // acesso total
+  VENDEDOR: ['/clientes'],
+  FINANCEIRO: ['/', '/contas-pagar', '/contas-receber', '/contas-bancarias', '/agendamentos', '/relatorios'],
+};
+
+function isRouteAllowed(perfil: string, pathname: string): boolean {
+  const allowed = PERFIL_ROUTES[perfil];
+  if (!allowed) return false;
+  if (allowed.includes('*')) return true;
+  return allowed.some(route => pathname === route || pathname.startsWith(route + '/'));
+}
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -17,13 +31,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading && mounted) {
-      // Se não estiver autenticado e não estiver na página de login, redireciona
+      // Se não estiver autenticado, redireciona para login
       if (!user && pathname !== '/login') {
         router.push('/login');
+        return;
       }
       // Se estiver autenticado e estiver na página de login, redireciona para home
       if (user && pathname === '/login') {
         router.push('/');
+        return;
+      }
+      // Verificar permissão de rota por perfil
+      if (user && pathname !== '/login') {
+        const perfil = user.perfil || (user.role === 'ADMIN' ? 'ADMIN' : 'FINANCEIRO');
+        if (!isRouteAllowed(perfil, pathname)) {
+          // Redirecionar para a primeira rota permitida
+          const allowed = PERFIL_ROUTES[perfil];
+          const redirectTo = allowed && !allowed.includes('*') ? allowed[0] : '/';
+          router.replace(redirectTo);
+        }
       }
     }
   }, [user, loading, pathname, router, mounted]);

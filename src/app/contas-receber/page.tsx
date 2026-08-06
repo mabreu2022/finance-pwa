@@ -30,10 +30,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, Pencil, Trash2, CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, CheckCircle2, AlertCircle, Calendar, FileText } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { fetchWithAuth } from '@/lib/auth/AuthContext';
+import { DocumentViewer } from '@/components/document-viewer';
 
 interface Conta {
   id: number;
@@ -45,6 +46,15 @@ interface Conta {
   status: string;
   tipo: string;
   observacoes: string | null;
+  conta_bancaria_id: number | null;
+  arquivo_boleto: string | null;
+  arquivo_comprovante: string | null;
+}
+
+interface ContaBancaria {
+  id: number;
+  nome: string;
+  tipo: string;
 }
 
 const categorias = [
@@ -61,8 +71,11 @@ const categorias = [
 
 export default function ContasReceberPage() {
   const [contas, setContas] = useState<Conta[]>([]);
+  const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingConta, setEditingConta] = useState<Conta | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -72,7 +85,14 @@ export default function ContasReceberPage() {
     dataVencimento: '',
     categoria: '',
     observacoes: '',
+    contaBancariaId: '',
+    arquivoBoleto: '',
+    arquivoComprovante: '',
   });
+  const [uploadingBoleto, setUploadingBoleto] = useState(false);
+  const [uploadingComprovante, setUploadingComprovante] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerTitle, setViewerTitle] = useState('');
 
   const loadContas = async () => {
     try {
@@ -88,9 +108,59 @@ export default function ContasReceberPage() {
     }
   };
 
+  const loadContasBancarias = async () => {
+    try {
+      const response = await fetchWithAuth('/api/contas-bancarias');
+      if (response.ok) {
+        const data = await response.json();
+        setContasBancarias(data.contas || []);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar contas bancárias:', error);
+    }
+  };
+
   useEffect(() => {
     loadContas();
+    loadContasBancarias();
   }, []);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, tipo: 'BOLETO' | 'COMPROVANTE') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (tipo === 'BOLETO') setUploadingBoleto(true);
+    else setUploadingComprovante(true);
+
+    const uploadData = new FormData();
+    uploadData.append('file', file);
+    uploadData.append('tipo', tipo);
+
+    try {
+      const response = await fetchWithAuth('/api/upload', {
+        method: 'POST',
+        body: uploadData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (tipo === 'BOLETO') {
+          setFormData(prev => ({ ...prev, arquivoBoleto: result.url }));
+        } else {
+          setFormData(prev => ({ ...prev, arquivoComprovante: result.url }));
+        }
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Erro ao enviar o arquivo.');
+      }
+    } catch (error) {
+      console.error('Erro no upload:', error);
+      alert('Falha ao enviar arquivo.');
+    } finally {
+      if (tipo === 'BOLETO') setUploadingBoleto(false);
+      else setUploadingComprovante(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,22 +172,42 @@ export default function ContasReceberPage() {
       categoria: formData.categoria,
       tipo: 'RECEBER',
       observacoes: formData.observacoes,
+      conta_bancaria_id: formData.contaBancariaId ? parseInt(formData.contaBancariaId) : null,
+      arquivo_boleto: formData.arquivoBoleto || null,
+      arquivo_comprovante: formData.arquivoComprovante || null,
     };
 
     try {
-      const response = await fetchWithAuth('/api/contas', {
-        method: 'POST',
+      const isEdit = !!editingConta;
+      const url = isEdit ? `/api/contas/${editingConta.id}` : '/api/contas';
+      const method = isEdit ? 'PATCH' : 'POST';
+
+      const response = await fetchWithAuth(url, {
+        method,
         body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         setDialogOpen(false);
         setEditingConta(null);
-        setFormData({ descricao: '', valor: '', dataVencimento: '', categoria: '', observacoes: '' });
+        setFormData({ 
+          descricao: '', 
+          valor: '', 
+          dataVencimento: '', 
+          categoria: '', 
+          observacoes: '', 
+          contaBancariaId: '',
+          arquivoBoleto: '',
+          arquivoComprovante: ''
+        });
         loadContas();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        alert(errorData.error || 'Erro ao salvar recebimento.');
       }
     } catch (error) {
       console.error('Erro ao salvar conta:', error);
+      alert('Ocorreu um erro de rede ao tentar salvar o recebimento.');
     }
   };
 
@@ -129,6 +219,9 @@ export default function ContasReceberPage() {
       dataVencimento: conta.data_vencimento,
       categoria: conta.categoria,
       observacoes: conta.observacoes || '',
+      contaBancariaId: conta.conta_bancaria_id ? conta.conta_bancaria_id.toString() : '',
+      arquivoBoleto: conta.arquivo_boleto || '',
+      arquivoComprovante: conta.arquivo_comprovante || '',
     });
     setDialogOpen(true);
   };
@@ -160,10 +253,20 @@ export default function ContasReceberPage() {
     }
   };
 
-  const filteredContas = contas.filter(conta =>
-    conta.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conta.categoria.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredContas = contas.filter(conta => {
+    const matchesSearch = conta.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      conta.categoria.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    let matchesDate = true;
+    if (startDate) {
+      matchesDate = matchesDate && conta.data_vencimento >= startDate;
+    }
+    if (endDate) {
+      matchesDate = matchesDate && conta.data_vencimento <= endDate;
+    }
+    
+    return matchesSearch && matchesDate;
+  });
 
   const contasPendentes = filteredContas.filter(c => c.status === 'PENDENTE');
   const contasRecebidas = filteredContas.filter(c => c.status === 'RECEBIDO');
@@ -209,7 +312,7 @@ export default function ContasReceberPage() {
               className="bg-gradient-to-r from-emerald-500 to-teal-600"
               onClick={() => {
                 setEditingConta(null);
-                setFormData({ descricao: '', valor: '', dataVencimento: '', categoria: '', observacoes: '' });
+                setFormData({ descricao: '', valor: '', dataVencimento: '', categoria: '', observacoes: '', contaBancariaId: '' });
               }}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -257,21 +360,40 @@ export default function ContasReceberPage() {
                 </div>
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="categoria">Categoria</Label>
-                <Select
-                  value={formData.categoria}
-                  onValueChange={(value) => setFormData({ ...formData, categoria: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categorias.map((cat) => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="categoria">Categoria</Label>
+                  <Select
+                    value={formData.categoria || undefined}
+                    onValueChange={(value) => setFormData({ ...formData, categoria: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categorias.map((cat) => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="contaBancariaId">Conta Bancária / Banco</Label>
+                  <Select
+                    value={formData.contaBancariaId || undefined}
+                    onValueChange={(value) => setFormData({ ...formData, contaBancariaId: value })}
+                  >
+                    <SelectTrigger id="contaBancariaId">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {contasBancarias.map((cb) => (
+                        <SelectItem key={cb.id} value={cb.id.toString()}>{cb.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               
               <div className="space-y-2">
@@ -282,6 +404,44 @@ export default function ContasReceberPage() {
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   placeholder="Observações opcionais"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="arquivoBoletoInput">Anexar Boleto / Doc</Label>
+                  <Input
+                    id="arquivoBoletoInput"
+                    type="file"
+                    accept=".pdf,image/*"
+                    onChange={(e) => handleFileChange(e, 'BOLETO')}
+                    disabled={uploadingBoleto}
+                    className="cursor-pointer text-xs"
+                  />
+                  {uploadingBoleto && <p className="text-[10px] text-cyan-600 animate-pulse">Enviando...</p>}
+                  {formData.arquivoBoleto && (
+                    <p className="text-[10px] text-emerald-600 truncate">
+                      ✅ <a href={formData.arquivoBoleto} target="_blank" rel="noreferrer" className="underline hover:text-emerald-750">Ver Boleto</a>
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="arquivoComprovanteInput">Anexar Comprovante</Label>
+                  <Input
+                    id="arquivoComprovanteInput"
+                    type="file"
+                    accept=".pdf,image/*"
+                    onChange={(e) => handleFileChange(e, 'COMPROVANTE')}
+                    disabled={uploadingComprovante}
+                    className="cursor-pointer text-xs"
+                  />
+                  {uploadingComprovante && <p className="text-[10px] text-cyan-600 animate-pulse">Enviando...</p>}
+                  {formData.arquivoComprovante && (
+                    <p className="text-[10px] text-emerald-600 truncate">
+                      ✅ <a href={formData.arquivoComprovante} target="_blank" rel="noreferrer" className="underline hover:text-emerald-750">Ver Comprovante</a>
+                    </p>
+                  )}
+                </div>
               </div>
               
               <DialogFooter>
@@ -294,14 +454,51 @@ export default function ContasReceberPage() {
         </Dialog>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar recebimentos..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
+      <div className="flex flex-col md:flex-row gap-4 items-end md:items-center justify-between">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar recebimentos..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 w-full"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="filter-start-date" className="text-xs font-medium text-muted-foreground whitespace-nowrap">Início:</Label>
+            <Input
+              id="filter-start-date"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-[140px] h-9 text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="filter-end-date" className="text-xs font-medium text-muted-foreground whitespace-nowrap">Fim:</Label>
+            <Input
+              id="filter-end-date"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-[140px] h-9 text-xs"
+            />
+          </div>
+          {(startDate || endDate) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setStartDate('');
+                setEndDate('');
+              }}
+              className="text-xs h-9"
+            >
+              Limpar Filtros
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -323,10 +520,24 @@ export default function ContasReceberPage() {
                         {getStatusBadge(conta)}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {conta.categoria} • Vencimento: {formatDate(conta.data_vencimento)}
+                        {conta.categoria} {conta.conta_bancaria_id && `• ${contasBancarias.find(b => b.id === conta.conta_bancaria_id)?.nome || 'Banco'}`} • Vencimento: {formatDate(conta.data_vencimento)}
                       </p>
                     </div>
                     <div className="flex items-center gap-4 ml-4">
+                      {conta.arquivo_boleto && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-cyan-600 hover:text-cyan-750" 
+                          title="Ver Boleto/Cobrança"
+                          onClick={() => {
+                            setViewerUrl(conta.arquivo_boleto);
+                            setViewerTitle(`Documento: ${conta.descricao}`);
+                          }}
+                        >
+                          <FileText className="w-4 h-4" />
+                        </Button>
+                      )}
                       <span className="text-lg font-bold text-emerald-600">
                         {formatCurrency(conta.valor)}
                       </span>
@@ -367,10 +578,38 @@ export default function ContasReceberPage() {
                         {getStatusBadge(conta)}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {conta.categoria} • Recebido em: {conta.data_pagamento ? formatDate(conta.data_pagamento) : '-'}
+                        {conta.categoria} {conta.conta_bancaria_id && `• ${contasBancarias.find(b => b.id === conta.conta_bancaria_id)?.nome || 'Banco'}`} • Recebido em: {conta.data_pagamento ? formatDate(conta.data_pagamento) : '-'}
                       </p>
                     </div>
                     <div className="flex items-center gap-4 ml-4">
+                      {conta.arquivo_boleto && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-cyan-600 hover:text-cyan-750" 
+                          title="Ver Boleto/Cobrança"
+                          onClick={() => {
+                            setViewerUrl(conta.arquivo_boleto);
+                            setViewerTitle(`Documento: ${conta.descricao}`);
+                          }}
+                        >
+                          <FileText className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {conta.arquivo_comprovante && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-emerald-600 hover:text-emerald-750" 
+                          title="Ver Comprovante de Pagamento"
+                          onClick={() => {
+                            setViewerUrl(conta.arquivo_comprovante);
+                            setViewerTitle(`Comprovante: ${conta.descricao}`);
+                          }}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </Button>
+                      )}
                       <span className="text-lg font-bold text-emerald-600">
                         {formatCurrency(conta.valor)}
                       </span>
@@ -410,6 +649,13 @@ export default function ContasReceberPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DocumentViewer 
+        url={viewerUrl}
+        isOpen={viewerUrl !== null}
+        onClose={() => setViewerUrl(null)}
+        title={viewerTitle}
+      />
     </div>
   );
 }

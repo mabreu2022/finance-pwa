@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth/auth';
-import { contasRepository } from '@/lib/db/repositories';
+import { contasRepository, contasBancariasRepository, licencasRepository } from '@/lib/db/repositories';
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,19 +18,32 @@ export async function GET(request: NextRequest) {
     }
 
     const tenantId = payload.tenantId;
+    const userId = payload.userId;
+
+    // Processar automações de licenças (cobranças automáticas e renovações)
+    await licencasRepository.processarAutomacoes(tenantId, userId);
+
+    // Obter parâmetros de período
+    const { searchParams } = new URL(request.url);
+    const startDate = searchParams.get('startDate') || undefined;
+    const endDate = searchParams.get('endDate') || undefined;
 
     // Buscar dados
-    const totalPagar = await contasRepository.getTotalPendente(tenantId, 'PAGAR');
-    const totalReceber = await contasRepository.getTotalPendente(tenantId, 'RECEBER');
-    const contasPendentes = (await contasRepository.getPendentes(tenantId)).length;
-    const contasAtrasadas = (await contasRepository.getAtrasadas(tenantId)).length;
+    const totalPagar = await contasRepository.getTotalPendente(tenantId, 'PAGAR', startDate, endDate);
+    const totalReceber = await contasRepository.getTotalPendente(tenantId, 'RECEBER', startDate, endDate);
+    const contasPendentes = (await contasRepository.getPendentes(tenantId, startDate, endDate)).length;
+    const contasAtrasadas = (await contasRepository.getAtrasadas(tenantId, startDate, endDate)).length;
+    const contasBancarias = await contasBancariasRepository.getAll(tenantId);
+    const contasPeriodo = await contasRepository.getPeriodo(tenantId, startDate, endDate);
 
     return NextResponse.json({
       totalPagar,
       totalReceber,
       saldo: totalReceber - totalPagar,
       contasPendentes,
-      contasAtrasadas
+      contasAtrasadas,
+      contasBancarias,
+      contasPeriodo
     });
 
   } catch (error) {

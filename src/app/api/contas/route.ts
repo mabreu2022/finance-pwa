@@ -59,7 +59,10 @@ const createSchema = z.object({
   data_vencimento: z.string(),
   categoria: z.string(),
   tipo: z.enum(['PAGAR', 'RECEBER']),
-  observacoes: z.string().optional()
+  observacoes: z.string().optional(),
+  conta_bancaria_id: z.number().nullable().optional(),
+  arquivo_boleto: z.string().nullable().optional(),
+  arquivo_comprovante: z.string().nullable().optional()
 });
 
 export async function POST(request: NextRequest) {
@@ -83,6 +86,7 @@ export async function POST(request: NextRequest) {
     const contaId = await contasRepository.create({
       tenant_id: auth.user.tenantId,
       usuario_id: auth.user.userId,
+      conta_bancaria_id: data.conta_bancaria_id || null,
       descricao: data.descricao,
       valor: data.valor,
       data_vencimento: data.data_vencimento,
@@ -90,7 +94,9 @@ export async function POST(request: NextRequest) {
       categoria: data.categoria,
       status: 'PENDENTE',
       tipo: data.tipo,
-      observacoes: data.observacoes || null
+      observacoes: data.observacoes || null,
+      arquivo_boleto: data.arquivo_boleto || null,
+      arquivo_comprovante: data.arquivo_comprovante || null
     });
 
     return NextResponse.json(
